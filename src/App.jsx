@@ -4,6 +4,7 @@ export default function WebSerialTest() {
   const [port, setPort] = useState(null);
   const [status, setStatus] = useState("Not connected");
   const [log, setLog] = useState([]);
+  const [reader, setReader] = useState(null);
 
   const addLog = (message) => {
     setLog((prev) => [
@@ -46,11 +47,12 @@ export default function WebSerialTest() {
 
   const readData = async (selectedPort) => {
     try {
-      const reader = selectedPort.readable.getReader();
+      const portReader = selectedPort.readable.getReader();
+      setReader(portReader);
       addLog("📡 Started reading data...");
 
       while (true) {
-        const { value, done } = await reader.read();
+        const { value, done } = await portReader.read();
         if (done) {
           addLog("📭 Reader closed");
           break;
@@ -65,15 +67,28 @@ export default function WebSerialTest() {
         );
       }
 
-      reader.releaseLock();
+      portReader.releaseLock();
+      setReader(null);
     } catch (error) {
-      addLog(`❌ Read error: ${error.message}`);
+      if (error.message.includes("cancel")) {
+        addLog("📭 Reader cancelled");
+      } else {
+        addLog(`❌ Read error: ${error.message}`);
+      }
+      setReader(null);
     }
   };
 
   const disconnect = async () => {
     if (port) {
       try {
+        // Cancel and release the reader first
+        if (reader) {
+          await reader.cancel();
+          reader.releaseLock();
+          setReader(null);
+        }
+
         await port.close();
         setPort(null);
         setStatus("Disconnected");
